@@ -1,0 +1,54 @@
+# Copy this file to ../../data/sources.yaml and fill in real values.
+# data/sources.yaml lives outside this repo and is never committed.
+
+repos:
+  # Prefer `type: json` where the repo publishes structured listings --
+  # the SimplifyJobs-family repos keep a listings.json with company, title,
+  # locations, url, active flag, and date_posted. It's more reliable than
+  # parsing the README and gives real posting dates.
+  - name: example-internships-repo
+    type: json
+    url: https://raw.githubusercontent.com/ORG/REPO/dev/.github/scripts/listings.json
+
+  # `type: markdown` (the default) parses the first table in a raw README.
+  # Verify the exact repo/branch name yourself -- these community lists get
+  # renamed/forked often.
+  - name: example-new-grad-repo
+    type: markdown
+    url: https://raw.githubusercontent.com/ORG/REPO/main/README.md
+
+# Only postings at most this many days old are considered (when the source
+# provides an age/date; postings with unknown age are kept and flagged for
+# review rather than dropped). Default 1, capped at 3.
+max_age_days: 1
+
+filters:
+  # Hard excludes -- applied first, no LLM involved. Any posting matching
+  # one of these is dropped entirely, before the keyword/review split.
+  locations_exclude:
+    - "Bangalore, India"
+
+  seniority_exclude:
+    - "Senior"
+    - "Staff"
+    - "Principal"
+
+  # Matched against role + location + company + category. json sources set
+  # category (e.g. "Quant", "Hardware", "AI/ML/Data") — excluding whole
+  # categories here is the cheapest way to shrink the LLM-review bucket.
+  keywords_exclude:
+    - "Security Clearance Required"
+
+  # Loose keyword match on the role title -> auto-included, no LLM needed.
+  keywords_include:
+    - "Software Engineer"
+    - "Backend"
+    - "Full Stack"
+
+# Free-text description of your background/skills. Used by the find-jobs
+# LLM review pass to judge postings that survived the hard excludes but
+# didn't hit a keyword above -- e.g. a role phrased around "platform
+# engineering" or "developer productivity" that's still a real fit.
+profile: |
+  Replace this with a few sentences about your background, target roles,
+  and skills. This can largely mirror the skills section of your resume.

@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+
+# Defensive: personal data belongs in the sibling ../data directory, never
+# inside this repo. This just guards against it ending up here by accident.
+local-data/
+data/
