@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.venv/bin/python scripts/fetch_source.py *)",
+      "Bash(.venv/bin/python scripts/diff_snapshot.py *)",
+      "Bash(.venv/bin/python scripts/filter_jobs.py*)",
+      "Bash(.venv/bin/python scripts/track_applications.py *)",
+      "Bash(.venv/bin/python -m pytest*)",
+      "Bash(.venv/bin/pip install -r requirements.txt)",
+      "Bash(python3 -m venv .venv)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:github.com)"
+    ],
+    "additionalDirectories": [
+      "../data"
+    ]
+  }
+}

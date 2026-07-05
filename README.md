@@ -16,10 +16,16 @@ Pro subscription (no separate API billing).
    anomalies, keeping subscription usage for actual reasoning.
 2. **`/tailor-resume`** — given a posting you pick from that list, rewords
    and reorders your existing resume bullets to match the job description's
-   language. It does not invent new bullets or change facts/scope.
+   language. It does not invent new bullets or change facts/scope. Output
+   (bullets plus a fit summary of direct matches, transferable matches,
+   and honest gaps) is written to `data/tailored/` and printed in chat.
 
-Resume-document automation and applying are future steps. v1 output for
-tailoring is text-only, printed in chat for you to copy.
+Every posting shown is recorded in `data/applications.yaml` with a status
+(`seen` → `tailored` → `applied`). find-jobs marks postings you've already
+seen instead of re-listing them as new; tailoring sets `tailored`; set
+`applied` by hand (the file is plain YAML) until the apply step exists.
+
+Resume-document automation and applying are future steps.
 
 ## Setup
 
