@@ -73,6 +73,43 @@ def test_exact_duplicates_dropped(monkeypatch, tmp_path):
     assert len(result["keyword_match"]) == 1
 
 
+def test_matches_any_word_boundaries():
+    assert filter_jobs.matches_any_word("US, CA, Santa Clara", ["CA"])
+    assert filter_jobs.matches_any_word("Toronto, ON, Canada", ["ON"])
+    assert not filter_jobs.matches_any_word("Cape Town, South Africa", ["CA"])
+    assert not filter_jobs.matches_any_word("London, UK", ["ON"])
+    assert not filter_jobs.matches_any_word("Ukraine", ["UK"])
+
+
+def test_locations_include_unmatched_goes_to_review_flagged(monkeypatch, tmp_path):
+    config = {**BASE_CONFIG,
+              "filters": {**BASE_CONFIG["filters"], "locations_include": ["USA", "TX"]}}
+    result = run_filter(monkeypatch, tmp_path, config, [
+        posting(location="Austin, TX"),                     # allowlisted, keyword role
+        posting(company="Globex", location="Amsterdam"),    # unmatched -> review, flagged
+    ])
+    assert [p["company"] for p in result["keyword_match"]] == ["Acme"]
+    assert [p["company"] for p in result["review"]] == ["Globex"]
+    assert result["review"][0]["location_unverified"] is True
+
+
+def test_no_locations_include_skips_the_check(monkeypatch, tmp_path):
+    result = run_filter(monkeypatch, tmp_path, BASE_CONFIG,
+                        [posting(location="Amsterdam")])
+    assert len(result["keyword_match"]) == 1
+
+
+def test_sponsorship_matchable_in_excludes(monkeypatch, tmp_path):
+    config = {**BASE_CONFIG,
+              "filters": {**BASE_CONFIG["filters"],
+                          "keywords_exclude": ["U.S. Citizenship is Required"]}}
+    result = run_filter(monkeypatch, tmp_path, config, [
+        posting(sponsorship="U.S. Citizenship is Required"),
+        posting(company="Globex", sponsorship="Offers Sponsorship"),
+    ])
+    assert [p["company"] for p in result["keyword_match"]] == ["Globex"]
+
+
 def test_hard_excludes(monkeypatch, tmp_path):
     result = run_filter(monkeypatch, tmp_path, BASE_CONFIG, [
         posting(location="Bangalore, India"),
