@@ -22,20 +22,45 @@ repos:
 # review rather than dropped). Default 1, capped at 3.
 max_age_days: 1
 
+# Snapshot cleanup, applied automatically on each fetch. records_days keeps
+# parsed <date>.json snapshots (diff history); raw_days keeps raw.<date>.*
+# page copies (only needed to diagnose recent parse anomalies). The newest
+# two files per source are always kept regardless of age so the diff
+# baseline survives gaps between runs. Defaults shown.
+retention:
+  records_days: 14
+  raw_days: 3
+
 filters:
   # Hard excludes -- applied first, no LLM involved. Any posting matching
   # one of these is dropped entirely, before the keyword/review split.
   locations_exclude:
     - "Bangalore, India"
 
+  # Optional allowlist, word-boundary matched (so 'CA' matches
+  # 'US, CA, Santa Clara' but not 'Africa'). Postings matching none of
+  # these are NOT dropped -- location strings are too messy for that
+  # ("NYC", "Amsterdam") -- they go to the review bucket flagged
+  # location_unverified for the LLM pass to judge. Omit to skip the check.
+  # Include country names, big-city shorthands, and state/province codes
+  # for your target regions.
+  locations_include:
+    - "USA"
+    - "Canada"
+    - "NYC"
+    - "TX"
+
   seniority_exclude:
     - "Senior"
     - "Staff"
     - "Principal"
 
-  # Matched against role + location + company + category. json sources set
-  # category (e.g. "Quant", "Hardware", "AI/ML/Data") — excluding whole
-  # categories here is the cheapest way to shrink the LLM-review bucket.
+  # Matched against role + location + company + category + sponsorship.
+  # json sources set category (e.g. "Quant", "Hardware", "AI/ML/Data") —
+  # excluding whole categories here is the cheapest way to shrink the
+  # LLM-review bucket. Simplify-style sources also set sponsorship (e.g.
+  # "Does Not Offer Sponsorship", "U.S. Citizenship is Required"), which
+  # can be excluded here if that rules a posting out for you.
   keywords_exclude:
     - "Security Clearance Required"
 

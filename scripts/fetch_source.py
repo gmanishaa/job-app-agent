@@ -32,14 +32,17 @@ def normalize_rows(raw_rows: list[dict]) -> list[dict]:
     last_company = ""
     for row in raw_rows:
         company_cell = row.get("Company") or row.get("Company Name") or ""
-        role_cell = row.get("Role") or row.get("Position") or row.get("Title") or ""
+        role_cell = (row.get("Role") or row.get("Position") or row.get("Title")
+                     or row.get("Job Title") or "")
         location_cell = row.get("Location") or ""
-        link_cell = row.get("Application/Link") or row.get("Link") or row.get("Apply") or ""
+        link_cell = (row.get("Application/Link") or row.get("Link") or row.get("Apply")
+                     or row.get("Posting") or "")
         age_cell = row.get("Age") or row.get("Date Posted") or row.get("Date") or ""
 
         company, _ = strip_markdown_link(company_cell)
         role, role_link = strip_markdown_link(role_cell)
         _, link = strip_markdown_link(link_cell)
+        location_cell, _ = strip_markdown_link(location_cell)
 
         # Repos mark "same company as the row above" with an arrow.
         company = company.strip()
@@ -79,8 +82,46 @@ def normalize_json_listings(listings: list[dict]) -> list[dict]:
             "link": (item.get("url") or "").strip(),
             "age_days": int((now - date_posted) // 86400) if date_posted else None,
             "category": (item.get("category") or "").strip(),
+            "sponsorship": (item.get("sponsorship") or "").strip(),
         })
     return records
+
+
+def prune_old_snapshots(snapshot_dir, config: dict) -> None:
+    """Delete snapshot files past their retention window.
+
+    The newest two files of each kind are always kept regardless of age:
+    the diff needs today's records plus the most recent prior ones, and a
+    gap between runs must never delete the comparison baseline (which would
+    make every posting look "new" again).
+    """
+    retention = config.get("retention") or {}
+    records_days = int(retention.get("records_days", 14))
+    raw_days = int(retention.get("raw_days", 3))
+    today = datetime.date.today()
+
+    def prune(pattern: str, keep_days: int) -> int:
+        removed = 0
+        files = sorted(snapshot_dir.glob(pattern))
+        for f in files[:-2]:  # newest two are always safe
+            date_str = f.name.removeprefix("raw.")[:10]
+            try:
+                file_date = datetime.date.fromisoformat(date_str)
+            except ValueError:
+                continue
+            if (today - file_date).days > keep_days:
+                f.unlink()
+                removed += 1
+        return removed
+
+    pruned_records = prune("????-??-??.json", records_days)
+    pruned_raw = prune("raw.????-??-??.*", raw_days)
+    if pruned_records or pruned_raw:
+        print(
+            f"Pruned {pruned_records} records snapshot(s) and {pruned_raw} raw "
+            f"file(s) older than {records_days}/{raw_days} days",
+            file=sys.stderr,
+        )
 
 
 def main():
@@ -120,6 +161,8 @@ def main():
     raw_ext = "json" if source_type == "json" else "md"
     (snapshot_dir / f"raw.{today}.{raw_ext}").write_text(resp.text)
     (snapshot_dir / f"{today}.json").write_text(json.dumps(records, indent=2))
+
+    prune_old_snapshots(snapshot_dir, config)
 
     print(f"Fetched {len(records)} postings from {source_name} -> {snapshot_dir / f'{today}.json'}")
 

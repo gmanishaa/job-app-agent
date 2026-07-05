@@ -1,6 +1,7 @@
 """Shared helpers for the job-app-agent scripts."""
 from __future__ import annotations
 
+import datetime
 import os
 import re
 import sys
@@ -36,32 +37,43 @@ def _is_separator_row(cells: list[str]) -> bool:
     return bool(cells) and all(re.fullmatch(r":?-+:?", c) for c in cells)
 
 
-def _parse_table_block(block: list[str]) -> list[dict]:
-    """Parse one contiguous block of |-lines: first line is the header."""
-    header = _split_row(block[0])
-    rows = []
-    for line in block[1:]:
-        cells = _split_row(line)
-        if _is_separator_row(cells) or len(cells) != len(header):
-            continue
-        rows.append(dict(zip(header, cells)))
-    return rows
-
-
 def parse_markdown_table(markdown_text: str) -> list[dict]:
     """Parse every markdown table in the text into a list of row dicts keyed by header.
 
     The job-list READMEs often contain several tables (split by category or
     month), each with its own header, so tables are parsed independently and
     the rows concatenated. normalize_rows() reconciles the varying headers.
+
+    A block of |-lines only starts a *new* table when its second line is a
+    separator row (header | --- | ...). Otherwise it's treated as a
+    continuation of the current table — this happens when a stray newline
+    inside a cell splits a table in two, and would otherwise misread a data
+    row as the header, junking every row after it.
     """
     rows: list[dict] = []
+    header: list[str] | None = None
     block: list[str] = []
+
+    def flush() -> None:
+        nonlocal header
+        if len(block) >= 2 and _is_separator_row(_split_row(block[1])):
+            header = _split_row(block[0])
+            data_lines = block[2:]
+        elif header is not None:
+            data_lines = block
+        else:
+            return  # pipe-lines before any table header: not a table
+        for line in data_lines:
+            cells = _split_row(line)
+            if _is_separator_row(cells) or len(cells) != len(header):
+                continue
+            rows.append(dict(zip(header, cells)))
+
     for line in markdown_text.splitlines() + [""]:  # sentinel flushes last block
         if line.strip().startswith("|"):
             block.append(line)
         elif block:
-            rows.extend(_parse_table_block(block))
+            flush()
             block = []
     return rows
 
@@ -84,21 +96,47 @@ def get_max_age_days(config: dict) -> int:
 
 
 def parse_age_days(cell: str) -> int | None:
-    """Parse an age cell like '0d', '12h', '2w', '1mo' into whole days.
+    """Parse an age cell into whole days.
 
-    Returns None when the cell doesn't match that pattern (e.g. a literal
-    date, or an empty cell) — unknown ages are kept, not dropped.
+    Handles '0d'/'12h'/'2w'/'1mo' relative ages and 'Jul 05'-style dates
+    (assumed to be the most recent past occurrence of that month/day).
+    Returns None when the cell matches neither — unknown ages are kept,
+    not dropped.
     """
-    m = re.match(r"(\d+)\s*(h|d|w|mo)$", cell.strip().lower())
-    if not m:
+    text = cell.strip()
+    m = re.match(r"(\d+)\s*(h|d|w|mo)$", text.lower())
+    if m:
+        n, unit = int(m.group(1)), m.group(2)
+        return {"h": 0, "d": n, "w": n * 7, "mo": n * 30}[unit]
+
+    try:
+        parsed = datetime.datetime.strptime(text.title(), "%b %d")
+    except ValueError:
         return None
-    n, unit = int(m.group(1)), m.group(2)
-    return {"h": 0, "d": n, "w": n * 7, "mo": n * 30}[unit]
+    today = datetime.date.today()
+    posted = parsed.date().replace(year=today.year)
+    if posted > today:
+        posted = posted.replace(year=today.year - 1)
+    return (today - posted).days
 
 
 def strip_markdown_link(cell: str) -> tuple[str, str | None]:
-    """Given a cell that may be a [text](url) link, return (text, url)."""
-    m = re.match(r"\[([^\]]+)\]\(([^)]+)\)", cell.strip())
+    """Extract (text, url) from a table cell.
+
+    Handles [text](url) markdown links (including bold/italic-wrapped, e.g.
+    **[SAP](url)**) and HTML anchors (e.g. <a href="url"><strong>NVIDIA</strong></a>,
+    where the anchor body may be an <img> — then text comes back empty).
+    Plain cells return (cell text, None) with any stray HTML tags removed.
+    """
+    cell = cell.strip()
+
+    m = re.search(r'<a\s[^>]*href="([^"]+)"[^>]*>(.*?)</a>', cell, re.S)
     if m:
-        return m.group(1), m.group(2)
-    return cell, None
+        text = re.sub(r"<[^>]+>", "", m.group(2)).strip()
+        return text, m.group(1)
+
+    m = re.match(r"\[([^\]]+)\]\(([^)]+)\)", cell.strip("*_ "))
+    if m:
+        return m.group(1).strip("*_ "), m.group(2)
+
+    return re.sub(r"<[^>]+>", "", cell).strip("*_ ").strip(), None
