@@ -46,13 +46,30 @@ README setup) — the system Python does not have the dependencies.
    processing needed.
 
 5. Review-bucket triage — two passes, cheapest first:
-   - **Pass 1 (no fetching):** judge every `review` posting on its
-     title, category, company, and location alone against the free-text
-     `profile` field in `sources.yaml`. Discard clear non-fits (wrong
-     discipline, wrong direction entirely). Only postings where the fit
-     is genuinely uncertain from the title move to pass 2 — this bucket
-     can run to hundreds of postings, so pass 1 must do most of the
-     cutting.
+   - **Pass 1 (no fetching, cheap model):** delegate this to a single
+     subagent pinned to the cheapest model (Haiku) — this step is
+     high-volume title triage, not deep reasoning, and delegating keeps
+     the full postings list out of the main conversation's context. Give
+     the subagent the `profile` text and the numbered `review` list.
+     The exact JSON field names on each posting are: `role` (the job
+     title — the field is NOT named "title"), `company`, `category`,
+     `location`, `sponsorship`, and optionally `location_unverified`
+     (boolean). Have it return a
+     verdict per posting: `fit` (clearly matches the profile from the
+     title alone), `no-fit` (clearly wrong discipline or region), or
+     `uncertain` — each with a one-line reason. Instruct it to be
+     conservative: `no-fit` only when clear; anything doubtful comes
+     back `uncertain`, never silently discarded.
+     For postings flagged `location_unverified` (matched no
+     `locations_include` term): `no-fit` if the location string is
+     clearly outside the profile's target regions, judge normally if
+     clearly inside, `uncertain` if too vague to tell.
+     Back in the main conversation: sanity-check the verdicts briefly
+     (reasons that don't make sense mean re-judging that posting
+     yourself), add `fit` postings to the final list as llm-review
+     matches, drop `no-fit`, and send `uncertain` to pass 2.
+     This bucket can run to hundreds of postings, so pass 1 must do
+     most of the cutting.
    - **Pass 2 (WebFetch, plausible ones only):** fetch the posting's
      `link` and judge the actual job description against the profile. Be
      conservative — this bucket already skipped the cheap keyword match
@@ -61,11 +78,20 @@ README setup) — the system Python does not have the dependencies.
      `needs_manual_check` instead of silently dropping it.
 
 6. Combine `keyword_match` + LLM-approved `review` items + any
-   `needs_manual_check` items into the final list. Write it to
-   `data/matches/<today's date>.md` as a numbered markdown table with
-   columns: `#`, Company, Role, Location, Matched via (keyword /
-   llm-review / manual-check-needed), Link.
+   `needs_manual_check` items into one list, then pipe it as JSON into:
+   `.venv/bin/python scripts/track_applications.py upsert`
+   This records new postings in `data/applications.yaml` with status
+   `seen`, and echoes the list back with `status` and `already_seen`
+   fields for postings that were shown in a previous run.
 
-7. Print the same list in chat. Tell the user they can say something like
+7. Write the final list to `data/matches/<today's date>.md` as a numbered
+   markdown table with columns: `#`, Company, Role, Location, Matched via
+   (keyword / llm-review / manual-check-needed), Status, Link.
+   - Status is `new` for first-time postings; for `already_seen` ones show
+     their tracker status (`seen` / `tailored` / `applied`) so the user
+     doesn't re-apply — keep them in the list, visibly marked, rather than
+     hiding them.
+
+8. Print the same list in chat. Tell the user they can say something like
    "tailor #3" (or a list of numbers) to generate resume bullets for a
    specific posting, which hands off to the `tailor-resume` skill.
