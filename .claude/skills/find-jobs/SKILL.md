@@ -70,12 +70,21 @@ README setup) — the system Python does not have the dependencies.
      matches, drop `no-fit`, and send `uncertain` to pass 2.
      This bucket can run to hundreds of postings, so pass 1 must do
      most of the cutting.
-   - **Pass 2 (WebFetch, plausible ones only):** fetch the posting's
-     `link` and judge the actual job description against the profile. Be
-     conservative — this bucket already skipped the cheap keyword match
-     for a reason. If the page isn't fetchable (login wall — e.g. some
-     aggregator links like Jobright require an account), mark it
-     `needs_manual_check` instead of silently dropping it.
+   - **Pass 2 (WebFetch, plausible ones only):** delegate this to a
+     single subagent pinned to the second-lowest-cost model (Sonnet 5) —
+     this pass does real reasoning over full job descriptions, so it
+     warrants a stronger model than pass 1's Haiku, but delegating still
+     keeps the fetched pages out of the main conversation's context. Give
+     the subagent the `profile` text and the `uncertain` postings with
+     their `link`s. Have it fetch each posting's `link` and judge the
+     actual job description against the profile. Be conservative — this
+     bucket already skipped the cheap keyword match for a reason. If the
+     page isn't fetchable (login wall — e.g. some aggregator links like
+     Jobright require an account), have it mark the posting
+     `needs_manual_check` instead of silently dropping it. Back in the
+     main conversation, sanity-check the verdicts, add the `fit` ones as
+     llm-review matches, and carry any `needs_manual_check` items
+     forward.
 
 6. Combine `keyword_match` + LLM-approved `review` items + any
    `needs_manual_check` items into one list, then pipe it as JSON into:
