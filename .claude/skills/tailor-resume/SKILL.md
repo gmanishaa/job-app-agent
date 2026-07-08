@@ -43,6 +43,14 @@ Run this when the user asks to tailor their resume for a specific posting
      experience bullets to stay within the total budget (trim bullets
      from jobs, never a whole job). List every dropped project and cut
      bullet in the fit summary so the user can override.
+   - Education coursework line (when present): reorder or trim to the
+     courses most relevant to this JD, or drop the line entirely when
+     coursework adds nothing for this posting.
+   - If content selected for the output still contains unfilled ADD-*
+     placeholders (demo/GitHub links, username, courses), keep the
+     placeholder visible and call it out in the fit summary as
+     must-fill-before-sending — never silently reproduce or invent a
+     value for it.
    - Skills section: reorder each category so the skills this JD asks for
      come first. A skill missing from the Skills list may be ADDED only
      when both hold: (a) the JD asks for it, and (b) the master resume
